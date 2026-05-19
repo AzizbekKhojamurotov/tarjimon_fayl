@@ -190,7 +190,7 @@ async def handle_language_choice(callback: CallbackQuery, state: FSMContext, bot
 
     # Notify user that processing has started
     processing_msg = await callback.message.answer(
-        f"⏳ Hujjat <b>{lang_label}</b> tiliga tarjima qilinmoqda… Bu biroz vaqt olishi mumkin, iltimos kuting."
+        f"⏳ Hujjat <b>{lang_label}</b> tiliga tarjima qilinmoqda… Bu biroz vaqt olishi mumkin(fayl hajmiga nisbatan 5-10 daqiqa), iltimos kuting."
     )
 
     # Retrieve stored state data
