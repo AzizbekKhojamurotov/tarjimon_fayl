@@ -18,7 +18,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 
 from handlers import router
-# 8470959300:AAEogSWL4TZCbQs0GR5e-qz3NS9laFSVXXM
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
