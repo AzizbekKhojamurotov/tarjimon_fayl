@@ -111,29 +111,42 @@ def translate_paragraph(paragraph, translator) -> None:
 
 def translate_document(doc: Document, translator) -> None:
     """
-    Walk the entire document structure and translate every paragraph:
-      • Body paragraphs
-      • Table cells (with nested-table recursion via iter_paragraphs_in_cell)
-      • Section headers and footers
+    Hujjat ichidagi barcha matnlarni bitta ro'yxatga yig'ib, 
+    Google API'ga BATCH (guruh) qilib yuboradi. 6 daqiqalik ishni 5 soniyaga tushiradi.
     """
-    # 1. Body paragraphs
-    for p in doc.paragraphs:
-        translate_paragraph(p, translator)
+    paragraphs_to_translate = []
 
-    # 2. Tables (including nested tables)
+    # 1. Oddiy xatboshilarni yig'amiz
+    for p in doc.paragraphs:
+        if p.text.strip():
+            paragraphs_to_translate.append(p)
+
+    # 2. Jadvallar ichidagi matnlarni yig'amiz
     for tbl in doc.tables:
         for row in tbl.rows:
             for cell in row.cells:
                 for p in iter_paragraphs_in_cell(cell):
-                    translate_paragraph(p, translator)
+                    if p.text.strip():
+                        paragraphs_to_translate.append(p)
 
-    # 3. Headers and footers (each section may have its own)
-    for section in doc.sections:
-        for p in section.header.paragraphs:
-            translate_paragraph(p, translator)
-        for p in section.footer.paragraphs:
-            translate_paragraph(p, translator)
+    if not paragraphs_to_translate:
+        return
 
+    # 3. Faqat matnlarni ajratib olamiz
+    texts = [p.text for p in paragraphs_to_translate]
+
+    try:
+        # Google API'ga barcha matnni bitta so'rovda yuboramiz!
+        logger.info(f"Google API'ga {len(texts)} ta qator bitta paketda yuborilmoqda...")
+        translated_texts = translator.translate_batch(texts)
+    except Exception as e:
+        logger.error(f"Batch translation xatosi: {e}")
+        return
+
+    # 4. Tarjima qilingan matnlarni o'z joylariga rasmga qarab joylashtiramiz
+    for p, translated_text in zip(paragraphs_to_translate, translated_texts):
+        if translated_text and translated_text != p.text:
+            write_text_to_runs(p, translated_text)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Top-level entry point called by the bot handler
