@@ -1,22 +1,25 @@
 """
 handlers.py — All Telegram update handlers for the translation bot.
 
-FSM flow
---------
-/start
-  └─> TranslationFSM.waiting_for_file
-
-User uploads .docx
-  └─> validate → save → show language keyboard
-  └─> TranslationFSM.waiting_for_language
-
-User taps a language button
-  └─> notify "processing…"
-  └─> TranslationFSM.processing
-  └─> asyncio.to_thread(translate_docx_file, …)   ← non-blocking!
-  └─> send translated file back
-  └─> cleanup temp files
-  └─> clear FSM state  (user can /start again)
+FSM flow (Optimized)
+--------------------
+/start yoki kutilmagan xabar
+  └─> TranslationFSM.waiting_for_source_language  <───┐
+                                                      │
+User selects source language                          │ (Bot avtomat shu yerga qaytadi)
+  └─> TranslationFSM.waiting_for_file                 │
+                                                      │
+User uploads .docx                                    │
+  └─> validate → save → show target language keyboard │
+  └─> TranslationFSM.waiting_for_target_language      │
+                                                      │
+User taps a target language button                    │
+  └─> notify "processing…"                            │
+  └─> TranslationFSM.processing                       │
+  └─> asyncio.to_thread(translate_docx_file, …)       │
+  └─> send translated file back                       │
+  └─> cleanup temp files                              │
+  └─> reset state to waiting_for_source_language ─────┘
 """
 
 import asyncio
@@ -80,8 +83,8 @@ async def cmd_start(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(TranslationFSM.waiting_for_source_language)
     await message.answer(
-        "👋 <b>Hello!</b> I'm your DOCX translation bot.\n\n"
-        "First, please select the <b>source language</b> of your document:",
+        "👋 <b>Assalomu alaykum!</b> Men DOCX formatidagi hujjatlarni tarjima qiluvchi botman.\n\n"
+        "Tarjima qilishni boshlash uchun, iltimos, hujjatning <b>manba tilini</b> tanlang:",
         reply_markup=language_keyboard(prefix="src")
     )
 
@@ -94,7 +97,7 @@ async def handle_source_language_choice(callback: CallbackQuery, state: FSMConte
     source_lang = callback.data.split(":")[1]
     
     if source_lang not in SUPPORTED_LANGS:
-        await callback.answer("Unknown language selection. Please try again.", show_alert=True)
+        await callback.answer("Noma'lum til tanlandi. Iltimos, qaytadan urinib ko'ring.", show_alert=True)
         return
 
     await callback.answer()
@@ -104,8 +107,8 @@ async def handle_source_language_choice(callback: CallbackQuery, state: FSMConte
     
     lang_label = SUPPORTED_LANGS[source_lang]
     await callback.message.edit_text(
-        f"✅ Source language selected: <b>{lang_label}</b>\n\n"
-        "Now, please upload your <b>.docx</b> file."
+        f"✅ Manba tili tanlandi: <b>{lang_label}</b>\n\n"
+        "Endi, iltimos, tarjima qilinishi kerak bo'lgan <b>.docx</b> faylingizni yuklang."
     )
     await state.set_state(TranslationFSM.waiting_for_file)
 
@@ -124,8 +127,8 @@ async def handle_document_upload(message: Message, state: FSMContext, bot: Bot) 
     # ── Validate extension ────────────────────────────────────────────────────
     if not doc.file_name or not doc.file_name.lower().endswith(".docx"):
         await message.answer(
-            "⚠️ Please send a <b>.docx</b> file (Microsoft Word format).\n"
-            "Other formats are not supported yet."
+            "⚠️ Iltimos, faqat <b>.docx</b> formatidagi faylni yuboring (Microsoft Word).\n"
+            "Boshqa formatlar hozircha qo'llab-quvvatlanmaydi."
         )
         return
 
@@ -137,7 +140,7 @@ async def handle_document_upload(message: Message, state: FSMContext, bot: Bot) 
     except Exception as exc:
         logger.error("Failed to download file from Telegram: %s", exc)
         await message.answer(
-            "❌ Sorry, I couldn't download your file. Please try sending it again."
+            "❌ Kechirasiz, faylni yuklab olishda xatolik yuz berdi. Iltimos, qaytadan yuboring."
         )
         _safe_remove(input_path)
         return
@@ -147,8 +150,8 @@ async def handle_document_upload(message: Message, state: FSMContext, bot: Bot) 
     await state.set_state(TranslationFSM.waiting_for_target_language)
 
     await message.answer(
-        f"✅ File <b>{doc.file_name}</b> received!\n\n"
-        "Now choose the <b>target language</b> for translation:",
+        f"✅ Fayl <b>{doc.file_name}</b> muvaffaqiyatli qabul qilindi!\n\n"
+        "Endi hujjat qaysi <b>maqsadli tilga</b> tarjima qilinishini tanlang:",
         reply_markup=language_keyboard(prefix="tgt"),
     )
 
@@ -157,8 +160,8 @@ async def handle_document_upload(message: Message, state: FSMContext, bot: Bot) 
 @router.message(TranslationFSM.waiting_for_file)
 async def handle_wrong_input_waiting_file(message: Message) -> None:
     await message.answer(
-        "📎 Please upload a <b>.docx</b> file to get started.\n"
-        "Use /start if you'd like to restart."
+        "📎 Jarayonni boshlash uchun <b>.docx</b> faylini yuklang.\n"
+        "Agar adashib ketgan bo'lsangiz, /start buyrug'idan foydalanishingiz mumkin."
     )
 
 
@@ -171,23 +174,23 @@ async def handle_wrong_input_waiting_file(message: Message) -> None:
     F.data.startswith("tgt:"),
 )
 async def handle_language_choice(callback: CallbackQuery, state: FSMContext, bot: Bot) -> None:
-    target_lang = callback.data.split(":")[1]   # e.g. "uz"
+    target_lang = callback.data.split(":")[1]
 
     if target_lang not in SUPPORTED_LANGS:
-        await callback.answer("Unknown language selection. Please try again.", show_alert=True)
+        await callback.answer("Noma'lum til tanlandi. Iltimos, qaytadan urinib ko'ring.", show_alert=True)
         return
 
-    # Acknowledge the button tap immediately (removes "loading" spinner in Telegram)
+    # Acknowledge the button tap immediately
     await callback.answer()
 
-    lang_label = SUPPORTED_LANGS[target_lang]   # e.g. "Uzbek 🇺🇿"
+    lang_label = SUPPORTED_LANGS[target_lang]
 
     # Remove the keyboard from the previous message
     await callback.message.edit_reply_markup(reply_markup=None)
 
     # Notify user that processing has started
     processing_msg = await callback.message.answer(
-        f"⏳ Translating to <b>{lang_label}</b>… This may take a moment, please wait."
+        f"⏳ Hujjat <b>{lang_label}</b> tiliga tarjima qilinmoqda… Bu biroz vaqt olishi mumkin, iltimos kuting."
     )
 
     # Retrieve stored state data
@@ -202,9 +205,7 @@ async def handle_language_choice(callback: CallbackQuery, state: FSMContext, bot
     output_path = _temp_path(callback.from_user.id, f"_translated_{target_lang}.docx")
 
     try:
-        # ── Run blocking translation in a thread pool ─────────────────────────
-        # asyncio.to_thread wraps the synchronous function so the Telegram event
-        # loop stays responsive while potentially large documents are processed.
+        # Run blocking translation in a thread pool
         await asyncio.to_thread(
             translate_docx_file,
             input_path,
@@ -213,47 +214,58 @@ async def handle_language_choice(callback: CallbackQuery, state: FSMContext, bot
             target_lang,
         )
 
-        # ── Build a nice output filename ──────────────────────────────────────
+        # Build a nice output filename
         base = os.path.splitext(original_name)[0]
         out_filename = f"{base}_translated_{target_lang}.docx"
 
-        # ── Read the translated file and send it back ─────────────────────────
+        # Read the translated file and send it back
         with open(output_path, "rb") as fh:
             file_bytes = fh.read()
 
         await callback.message.answer_document(
             document=BufferedInputFile(file_bytes, filename=out_filename),
             caption=(
-                f"✅ <b>Translation complete!</b>\n\n"
-                f"  • Source language : <b>{SUPPORTED_LANGS.get(source_lang, source_lang)}</b>\n"
-                f"  • Target language : <b>{lang_label}</b>\n\n"
-                f"📄 <i>{out_filename}</i>"
+                f"✅ <b>Tarjima yakunlandi!</b>\n\n"
+                f"  • Manba tili : <b>{SUPPORTED_LANGS.get(source_lang, source_lang)}</b>\n"
+                f"  • O'girilgan til : <b>{lang_label}</b>\n\n"
+                f"📄 <i>{out_filename}</i>\n\n"
+                f"📥 <b>Yangi fayl tarjima qilish uchun to'g'ridan-to'g'ri manba tilini tanlang:</b>"
             ),
         )
 
-        # Delete the "processing…" status message for a clean chat
+        # Automatically show the source language keyboard for the NEXT translation
+        await callback.message.answer(
+            "Yangi hujjatning <b>manba tilini</b> tanlang:",
+            reply_markup=language_keyboard(prefix="src")
+        )
+
+        # Delete the "processing…" status message
         await processing_msg.delete()
 
     except SameLanguageError as exc:
         source = str(exc)
         await processing_msg.edit_text(
-            f"ℹ️ The document is already in <b>{SUPPORTED_LANGS.get(source, source)}</b> — "
-            f"no translation needed!\n\n"
-            f"Use /start to upload a different file."
+            f"ℹ️ Hujjat allaqachon <b>{SUPPORTED_LANGS.get(source, source)}</b> tilida — "
+            f"tarjima qilish shart emas!\n\n"
+            f"Yangi fayl yuborish uchun pastdan manba tilini tanlang:",
+            reply_markup=language_keyboard(prefix="src")
         )
 
     except Exception as exc:
         logger.exception("Translation failed for user %s: %s", callback.from_user.id, exc)
         await processing_msg.edit_text(
-            "❌ <b>An error occurred</b> during translation.\n\n"
-            "This could be a temporary issue with the translation service. "
-            "Please try again in a moment, or use /start to upload a new file."
+            "❌ Tarjima jarayonida <b>xatolik yuz berdi</b>.\n\n"
+            "Bu xizmatdagi vaqtinchalik muammo bo'lishi mumkin. Qayta urinish uchun manba tilini tanlang:",
+            reply_markup=language_keyboard(prefix="src")
         )
 
     finally:
-        # ── Always clean up temp files — regardless of success or failure ─────
+        # ── Always clean up temp files ────────────────────────────────────────
         _safe_remove(input_path, output_path)
+        
+        # Reset state to the very first step instead of completely clearing it
         await state.clear()
+        await state.set_state(TranslationFSM.waiting_for_source_language)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -264,15 +276,17 @@ async def handle_language_choice(callback: CallbackQuery, state: FSMContext, bot
 async def handle_message_while_processing(message: Message) -> None:
     """Politely ask the user to wait while translation is running."""
     await message.answer(
-        "⏳ Still translating your document… please wait a moment!"
+        "⏳ Hujjatingiz hali ham tarjima qilinmoqda… iltimos, biroz kuting!"
     )
 
 
 @router.message(StateFilter(None))
 @router.message(~StateFilter(TranslationFSM))
 async def handle_unexpected_message(message: Message, state: FSMContext) -> None:
-    """Any message outside a known state — guide the user back to /start."""
+    """Any message outside a known state — seamlessly guide them to select a source language."""
     await state.clear()
+    await state.set_state(TranslationFSM.waiting_for_source_language)
     await message.answer(
-        "👋 Use /start to begin a new translation session."
+        "👋 Yangi faylni tarjima qilishni boshlash uchun pastdagi tugmalardan <b>manba tilini</b> tanlang:",
+        reply_markup=language_keyboard(prefix="src")
     )
